@@ -12,8 +12,9 @@ Environment setup:
 - [x] Entity secret generated + registered (recovery file under `./recovery/` — back it up somewhere safe)
 - [x] Wallet created on Arc Testnet (address in `.env` as `WALLET_ADDRESS`)
 - [ ] Wallet funded from the faucet
-- [ ] Mock contracts deployed to Arc Testnet
-- [ ] Decision loop (`agent/balances.ts`, `decide.ts`, `execute.ts`, `log.ts`) — not yet written
+- [x] Wallet funded (60 USDC on Arc Testnet)
+- [x] Decision loop built: `portfolio.ts` (read) → `decide.ts` (policy) → `execute.ts` (Circle swaps) → `log.ts` (audit trail), orchestrated by `index.ts`
+- [ ] Mock contracts deployed to Arc Testnet — **required before the loop can run end-to-end** (see step 2)
 
 Note: scripts run via plain `node agent/scripts/*.ts` (Node's built-in TypeScript
 support), not `tsx` — `tsx`'s CJS/ESM interop currently breaks on this SDK's
@@ -37,17 +38,54 @@ build step.
      --broadcast
    ```
    Copy the printed addresses into `.env` as `MOCK_RISK_TOKEN_ADDRESS` / `MOCK_POOL_ADDRESS`. (This needs its own funded EOA + private key to deploy from — separate from the Circle-managed wallet — since Foundry signs locally.)
-3. **Build the decision loop** in `agent/`: balance reader → drift/policy check → executor → audit log (see `agent/index.ts` for the outline).
+3. **Run the agent:**
+   ```bash
+   npm run agent:status          # portfolio + recent decisions
+   npm run agent:tick -- --dry-run  # decide + log, no execution
+   npm run agent:tick            # one real cycle (executes if warranted)
+   npm run agent:run             # continuous loop (every 30s)
+   npm run agent:pause           # stop executing (still reads/logs)
+   npm run agent:resume
+   ```
+
+## How the agent decides
+
+Rule: **protect liquidity first, invest second.** Each cycle reads USDC + risk
+balances from Arc, values the risk sleeve in USDC via the pool, then:
+
+- Liquidity **below** `liquidityFloorPct` → **TOP_UP** (sell risk → USDC) immediately.
+- Liquidity **above** `floor + rebalanceBandPct` → **DEPLOY** idle USDC → risk.
+- Otherwise → **HOLD**.
+
+Guardrails (`agent/policy.ts`): `maxTradeSizeUsdc` caps any single trade,
+`cooldownSeconds` prevents thrashing, `slippagePct` sets swap `minOut`. Every
+decision (executed or not) is appended to `agent/state/decisions.jsonl` with its
+reason; cooldown/pause state lives in `agent/state/state.json`.
+
+## Demo flow
+
+1. Wallet starts ~100% USDC → first `agent:tick` **DEPLOYs** idle cash into the risk sleeve (this also seeds the pool with USDC).
+2. Bump the risk price down (or simulate a spend) to break the floor:
+   ```bash
+   cd contracts && cast send $MOCK_POOL_ADDRESS "setPrice(uint256,string)" <newPrice> "price drop" \
+     --rpc-url $ARC_TESTNET_RPC_URL --private-key $DEPLOYER_PRIVATE_KEY
+   ```
+3. Next `agent:tick` sees liquidity below floor → **TOP_UP** in a couple of USDC txs, with the reason logged to the audit trail.
 
 ## Project structure
 
 ```
 LiquidRunway/
 ├── agent/
-│   ├── config.ts          # loads/validates .env
-│   ├── circleClient.ts     # shared Circle SDK client
-│   ├── policy.ts           # floor %, max trade size, cooldown
-│   ├── index.ts             # agent loop entry point (TODO: wire up)
+│   ├── config.ts           # loads/validates .env
+│   ├── circleClient.ts      # shared Circle SDK client
+│   ├── arc.ts               # viem client + ERC20/pool read helpers
+│   ├── portfolio.ts         # reads balances, values risk sleeve in USDC
+│   ├── policy.ts            # floor %, band, max trade size, cooldown, slippage
+│   ├── decide.ts            # pure rebalancing decision (action + reason)
+│   ├── execute.ts           # Circle approve + swap, polls tx to terminal state
+│   ├── log.ts               # audit trail + cooldown/pause state
+│   ├── index.ts             # orchestrator loop (tick/run/status/pause/resume)
 │   ├── scripts/             # one-off setup scripts
 │   └── state/                # local audit-log / decision state (gitignored)
 ├── contracts/               # Foundry: mock risk asset + owner-priced pool

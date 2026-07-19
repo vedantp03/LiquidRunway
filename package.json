@@ -8,7 +8,11 @@
     "setup:entity-secret": "node agent/scripts/generateEntitySecret.ts",
     "setup:wallet": "node agent/scripts/createWallet.ts",
     "balances": "node agent/scripts/checkBalances.ts",
-    "agent:run": "node agent/index.ts",
+    "agent:tick": "node agent/index.ts",
+    "agent:run": "node agent/index.ts --loop",
+    "agent:status": "node agent/index.ts --status",
+    "agent:pause": "node agent/index.ts --pause",
+    "agent:resume": "node agent/index.ts --resume",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
