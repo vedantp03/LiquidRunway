@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+*.log
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# state / audit log db
+agent/state/*.json
+!agent/state/.gitkeep

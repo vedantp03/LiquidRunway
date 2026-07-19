@@ -1,0 +1,23 @@
+{
+  "name": "liquidrunway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An agent that keeps your USDC liquid enough to spend while putting the rest to work, on Arc.",
+  "type": "module",
+  "scripts": {
+    "setup:entity-secret": "node agent/scripts/generateEntitySecret.ts",
+    "setup:wallet": "node agent/scripts/createWallet.ts",
+    "balances": "node agent/scripts/checkBalances.ts",
+    "agent:run": "node agent/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
+    "dotenv": "^16.4.5",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "^5.6.0"
+  }
+}
