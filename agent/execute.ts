@@ -6,9 +6,10 @@ import type { Decision } from "./decide.ts";
 import type { Portfolio } from "./portfolio.ts";
 import {
   requireAddresses,
-  readAllowance,
-  quoteUsdcToRisk,
-  quoteRiskToUsdc,
+  readContract,
+  multicall,
+  erc20Abi,
+  poolAbi,
   USDC_DECIMALS,
 } from "./arc.ts";
 
@@ -41,13 +42,22 @@ export async function executeDecision(
 
   const usdcBaseUnits = parseUnits(decision.amountUsdc.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
+  const owner = portfolioOwner();
+
   if (decision.action === "DEPLOY") {
-    // USDC -> risk. Don't spend more USDC than we hold.
     const amountIn = usdcBaseUnits > portfolio.raw.usdc ? portfolio.raw.usdc : usdcBaseUnits;
-    const expectedOut = await quoteUsdcToRisk(pool, amountIn);
+
+    // One RPC roundtrip for both pre-swap reads.
+    const [expectedOut, allowance] = await multicall({
+      allowFailure: false,
+      contracts: [
+        { address: pool, abi: poolAbi, functionName: "quoteUsdcToRisk", args: [amountIn] },
+        { address: usdc, abi: erc20Abi, functionName: "allowance", args: [owner, pool] },
+      ],
+    });
     const minOut = applySlippage(expectedOut, policy.slippagePct);
 
-    await ensureAllowance(usdc, pool, amountIn, txIds);
+    await ensureApproval(usdc, pool, allowance, amountIn, txIds);
     const swapId = await execContract(pool, "swapUsdcForRisk(uint256,uint256)", [
       amountIn.toString(),
       minOut.toString(),
@@ -60,12 +70,24 @@ export async function executeDecision(
   // TOP_UP: risk -> USDC. Size the risk to sell so we recover ~amountUsdc.
   // With the mock pool's linear, fee-less price, quoteUsdcToRisk(x) is exactly
   // the risk needed to realize x USDC.
-  let riskAmountIn = await quoteUsdcToRisk(pool, usdcBaseUnits);
-  if (riskAmountIn > portfolio.raw.risk) riskAmountIn = portfolio.raw.risk;
-  const expectedUsdcOut = await quoteRiskToUsdc(pool, riskAmountIn);
+  const initialRiskIn = (await readContract({
+    address: pool,
+    abi: poolAbi,
+    functionName: "quoteUsdcToRisk",
+    args: [usdcBaseUnits],
+  })) as bigint;
+  const riskAmountIn = initialRiskIn > portfolio.raw.risk ? portfolio.raw.risk : initialRiskIn;
+
+  const [expectedUsdcOut, riskAllowance] = await multicall({
+    allowFailure: false,
+    contracts: [
+      { address: pool, abi: poolAbi, functionName: "quoteRiskToUsdc", args: [riskAmountIn] },
+      { address: riskToken, abi: erc20Abi, functionName: "allowance", args: [owner, pool] },
+    ],
+  });
   const minOut = applySlippage(expectedUsdcOut, policy.slippagePct);
 
-  await ensureAllowance(riskToken, pool, riskAmountIn, txIds);
+  await ensureApproval(riskToken, pool, riskAllowance, riskAmountIn, txIds);
   const swapId = await execContract(pool, "swapRiskForUsdc(uint256,uint256)", [
     riskAmountIn.toString(),
     minOut.toString(),
@@ -75,8 +97,13 @@ export async function executeDecision(
   return { txIds };
 }
 
-async function ensureAllowance(token: Address, spender: Address, needed: bigint, txIds: string[]): Promise<void> {
-  const current = await readAllowance(token, portfolioOwner(), spender);
+async function ensureApproval(
+  token: Address,
+  spender: Address,
+  current: bigint,
+  needed: bigint,
+  txIds: string[],
+): Promise<void> {
   if (current >= needed) return;
   const approveId = await execContract(token, "approve(address,uint256)", [spender, maxUint256.toString()]);
   txIds.push(approveId);

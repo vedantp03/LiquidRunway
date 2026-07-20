@@ -11,10 +11,9 @@ Environment setup:
 - [x] Foundry contracts workspace (`contracts/`) with a mock risk-asset token + owner-priced mock pool, compiling cleanly
 - [x] Entity secret generated + registered (recovery file under `./recovery/` — back it up somewhere safe)
 - [x] Wallet created on Arc Testnet (address in `.env` as `WALLET_ADDRESS`)
-- [ ] Wallet funded from the faucet
 - [x] Wallet funded (60 USDC on Arc Testnet)
-- [x] Decision loop built: `portfolio.ts` (read) → `decide.ts` (policy) → `execute.ts` (Circle swaps) → `log.ts` (audit trail), orchestrated by `index.ts`
-- [ ] Mock contracts deployed to Arc Testnet — **required before the loop can run end-to-end** (see step 2)
+- [x] Mock contracts deployed to Arc Testnet (addresses in `.env`)
+- [x] Decision loop built and executed end-to-end: first `agent:tick` did a DEPLOY, wallet now sits at 25% USDC / 75% mBTC exactly at the floor
 
 Note: scripts run via plain `node agent/scripts/*.ts` (Node's built-in TypeScript
 support), not `tsx` — `tsx`'s CJS/ESM interop currently breaks on this SDK's

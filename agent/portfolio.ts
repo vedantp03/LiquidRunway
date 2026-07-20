@@ -2,9 +2,9 @@ import { getAddress, formatUnits, type Address } from "viem";
 import { config } from "./config.ts";
 import {
   requireAddresses,
-  readBalance,
-  readDecimals,
   quoteRiskToUsdc,
+  multicall,
+  erc20Abi,
   USDC_DECIMALS,
 } from "./arc.ts";
 
@@ -34,11 +34,17 @@ export async function readPortfolio(): Promise<Portfolio> {
   }
   const owner = getAddress(config.walletAddress);
 
-  const [usdcRaw, riskRaw, riskDecimals] = await Promise.all([
-    readBalance(usdcAddr, owner),
-    readBalance(riskToken, owner),
-    readDecimals(riskToken),
-  ]);
+  // Bundle the 3 reads into one RPC call via Multicall3 (deployed on Arc at
+  // 0xcA11bde05977b3631167028862bE2a173976CA11). The public Arc Testnet RPC
+  // hard-limits us per-call, so batching at the network layer isn't enough.
+  const [usdcRaw, riskRaw, riskDecimals] = await multicall({
+    allowFailure: false,
+    contracts: [
+      { address: usdcAddr, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
+      { address: riskToken, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
+      { address: riskToken, abi: erc20Abi, functionName: "decimals" },
+    ],
+  });
 
   const riskValueRaw = riskRaw > 0n ? await quoteRiskToUsdc(pool, riskRaw) : 0n;
 
