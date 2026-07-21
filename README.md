@@ -13,7 +13,8 @@ Environment setup:
 - [x] Wallet created on Arc Testnet (address in `.env` as `WALLET_ADDRESS`)
 - [x] Wallet funded (60 USDC on Arc Testnet)
 - [x] Mock contracts deployed to Arc Testnet (addresses in `.env`)
-- [x] Decision loop built and executed end-to-end: first `agent:tick` did a DEPLOY, wallet now sits at 25% USDC / 75% mBTC exactly at the floor
+- [x] Decision loop built and executed end-to-end: DEPLOY then TOP_UP verified on Arc, wallet rebalances to the 25% floor
+- [x] Web dashboard (`web/`): live portfolio, allocation-vs-target, current decision with approve/pause, and the decision log
 
 Note: scripts run via plain `node agent/scripts/*.ts` (Node's built-in TypeScript
 support), not `tsx` — `tsx`'s CJS/ESM interop currently breaks on this SDK's
@@ -37,7 +38,7 @@ build step.
      --broadcast
    ```
    Copy the printed addresses into `.env` as `MOCK_RISK_TOKEN_ADDRESS` / `MOCK_POOL_ADDRESS`. (This needs its own funded EOA + private key to deploy from — separate from the Circle-managed wallet — since Foundry signs locally.)
-3. **Run the agent:**
+3. **Run the agent (CLI):**
    ```bash
    npm run agent:status          # portfolio + recent decisions
    npm run agent:tick -- --dry-run  # decide + log, no execution
@@ -46,6 +47,14 @@ build step.
    npm run agent:pause           # stop executing (still reads/logs)
    npm run agent:resume
    ```
+4. **Or run the dashboard:**
+   ```bash
+   npm run web                   # http://localhost:4319
+   ```
+   Shows live portfolio, allocation vs. the floor/deploy band, the current
+   decision (with **Approve & execute** and **Pause**), a **Simulate spend**
+   button for the demo, and the full decision log. The server reuses the same
+   engine as the CLI, and caches the (rate-limited) Arc RPC reads.
 
 ## How the agent decides
 
@@ -81,17 +90,20 @@ LiquidRunway/
 │   ├── arc.ts               # viem client + ERC20/pool read helpers
 │   ├── portfolio.ts         # reads balances, values risk sleeve in USDC
 │   ├── policy.ts            # floor %, band, max trade size, cooldown, slippage
-│   ├── decide.ts            # pure rebalancing decision (action + reason)
+│   ├── decide.ts            # propose() (pure) + decide() (pause/cooldown-gated)
 │   ├── execute.ts           # Circle approve + swap, polls tx to terminal state
+│   ├── engine.ts            # shared logic: cached portfolio, snapshot, tick, approve, simulate spend
 │   ├── log.ts               # audit trail + cooldown/pause state
-│   ├── index.ts             # orchestrator loop (tick/run/status/pause/resume)
-│   ├── scripts/             # one-off setup scripts
+│   ├── index.ts             # CLI orchestrator (tick/run/status/pause/resume)
+│   ├── scripts/             # one-off setup + demo scripts
 │   └── state/                # local audit-log / decision state (gitignored)
 ├── contracts/               # Foundry: mock risk asset + owner-priced pool
 │   ├── src/MockRiskAsset.sol
 │   ├── src/MockPool.sol
 │   └── script/Deploy.s.sol
-├── web/                      # UI (not yet scaffolded)
+├── web/                      # dashboard
+│   ├── server.ts            # HTTP API + static serving (wraps engine.ts)
+│   └── public/              # index.html, styles.css, app.js
 ├── .env / .env.example
 └── package.json
 ```

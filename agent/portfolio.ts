@@ -5,6 +5,7 @@ import {
   quoteRiskToUsdc,
   multicall,
   erc20Abi,
+  poolAbi,
   USDC_DECIMALS,
 } from "./arc.ts";
 
@@ -16,6 +17,12 @@ export interface Portfolio {
     riskValueUsdc: bigint;
   };
   riskDecimals: number;
+  /** What the risk sleeve is currently allocated to. */
+  riskSymbol: string;
+  riskName: string;
+  riskTokenAddress: Address;
+  /** Current price of one whole risk unit, in USDC. */
+  riskPriceUsdc: number;
   /** Human-readable USDC values (for decisions / logging). */
   usdc: number;
   riskUnits: number;
@@ -34,15 +41,18 @@ export async function readPortfolio(): Promise<Portfolio> {
   }
   const owner = getAddress(config.walletAddress);
 
-  // Bundle the 3 reads into one RPC call via Multicall3 (deployed on Arc at
+  // Bundle the reads into one RPC call via Multicall3 (deployed on Arc at
   // 0xcA11bde05977b3631167028862bE2a173976CA11). The public Arc Testnet RPC
   // hard-limits us per-call, so batching at the network layer isn't enough.
-  const [usdcRaw, riskRaw, riskDecimals] = await multicall({
+  const [usdcRaw, riskRaw, riskDecimals, riskSymbol, riskName, priceRaw] = await multicall({
     allowFailure: false,
     contracts: [
       { address: usdcAddr, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
       { address: riskToken, abi: erc20Abi, functionName: "balanceOf", args: [owner] },
       { address: riskToken, abi: erc20Abi, functionName: "decimals" },
+      { address: riskToken, abi: erc20Abi, functionName: "symbol" },
+      { address: riskToken, abi: erc20Abi, functionName: "name" },
+      { address: pool, abi: poolAbi, functionName: "price" },
     ],
   });
 
@@ -51,12 +61,18 @@ export async function readPortfolio(): Promise<Portfolio> {
   const usdc = Number(formatUnits(usdcRaw, USDC_DECIMALS));
   const riskUnits = Number(formatUnits(riskRaw, riskDecimals));
   const riskValueUsdc = Number(formatUnits(riskValueRaw, USDC_DECIMALS));
+  // Pool price is expressed in USDC's 6-decimal base units per whole risk unit.
+  const riskPriceUsdc = Number(formatUnits(priceRaw, USDC_DECIMALS));
   const totalValueUsdc = usdc + riskValueUsdc;
   const liquidityPct = totalValueUsdc > 0 ? usdc / totalValueUsdc : 1;
 
   return {
     raw: { usdc: usdcRaw, risk: riskRaw, riskValueUsdc: riskValueRaw },
     riskDecimals,
+    riskSymbol,
+    riskName,
+    riskTokenAddress: riskToken,
+    riskPriceUsdc,
     usdc,
     riskUnits,
     riskValueUsdc,

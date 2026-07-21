@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LiquidRunway</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%A7%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">LR</div>
+          <div>
+            <h1>LiquidRunway</h1>
+            <p class="tagline">Keeps your USDC liquid enough to spend — puts the rest to work.</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span id="statusPill" class="pill pill-muted">…</span>
+          <button id="refreshBtn" class="btn btn-ghost" title="Refresh from chain">Refresh</button>
+          <button id="pauseBtn" class="btn btn-ghost">Pause</button>
+        </div>
+      </header>
+
+      <div id="banner" class="banner hidden"></div>
+
+      <section class="stat-grid">
+        <div class="card stat">
+          <div class="stat-label">Total value</div>
+          <div class="stat-value-row">
+            <div id="totalValue" class="stat-value">—</div>
+            <span id="portfolioPnl" class="pnl"></span>
+          </div>
+          <div id="walletAddr" class="stat-sub mono">—</div>
+          <div id="pnlBaseline" class="stat-sub"></div>
+        </div>
+        <div class="card stat accent-usdc">
+          <div class="stat-label">Liquid · USDC</div>
+          <div id="usdcValue" class="stat-value">—</div>
+          <div id="usdcPct" class="stat-sub">—</div>
+        </div>
+        <div class="card stat accent-risk">
+          <div class="stat-label">
+            Risk sleeve <span id="riskSymbol" class="chip">—</span>
+          </div>
+          <div class="stat-value-row">
+            <div id="riskValue" class="stat-value">—</div>
+            <span id="riskPnl" class="pnl"></span>
+          </div>
+          <div id="riskUnits" class="stat-sub">—</div>
+        </div>
+      </section>
+
+      <section class="card allocation">
+        <div class="card-head">
+          <h2>Allocation vs. target</h2>
+          <span id="allocHint" class="stat-sub">Floor is the minimum USDC you always keep liquid.</span>
+        </div>
+        <div class="bar-wrap">
+          <div class="bar">
+            <div id="usdcFill" class="bar-fill"></div>
+            <div id="floorMarker" class="marker marker-floor"><span>floor</span></div>
+            <div id="bandMarker" class="marker marker-band"><span>deploy</span></div>
+          </div>
+          <div class="bar-legend">
+            <span><i class="dot dot-usdc"></i> USDC <b id="legendUsdc">—</b></span>
+            <span><i class="dot dot-risk"></i> Risk <b id="legendRisk">—</b></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <div class="card decision">
+          <div class="card-head">
+            <h2>Current decision</h2>
+            <span id="decisionAge" class="stat-sub"></span>
+          </div>
+          <div class="decision-body">
+            <span id="decisionBadge" class="badge">—</span>
+            <div id="decisionReason" class="decision-reason">Loading…</div>
+          </div>
+          <div class="decision-actions">
+            <button id="tickBtn" class="btn btn-primary">Run cycle</button>
+            <button id="approveBtn" class="btn btn-accent hidden">Approve &amp; execute</button>
+            <span id="decisionNote" class="stat-sub"></span>
+          </div>
+        </div>
+
+        <div class="card controls">
+          <div class="card-head"><h2>Demo controls</h2></div>
+          <label class="field-label" for="spendAmount">Simulate a spend (USDC out)</label>
+          <div class="field-row">
+            <input id="spendAmount" type="number" min="0" step="1" value="10" />
+            <button id="spendBtn" class="btn btn-ghost">Spend</button>
+          </div>
+          <p class="stat-sub">Sends USDC to a burn address to break the liquidity floor, so you can watch the agent top&nbsp;up.</p>
+          <div class="control-divider"></div>
+          <button id="resetBaselineBtn" class="btn btn-ghost btn-sm">Reset P&amp;L baseline</button>
+          <p class="stat-sub">Re-anchors portfolio P&amp;L to the current value — use after funding the wallet.</p>
+        </div>
+      </section>
+
+      <section class="card log">
+        <div class="card-head">
+          <h2>Decision log</h2>
+          <span class="stat-sub">Why each move happened</span>
+        </div>
+        <ul id="logList" class="log-list">
+          <li class="log-empty">No decisions yet.</li>
+        </ul>
+      </section>
+
+      <footer class="foot">
+        <span>Arc Testnet · USDC-native gas</span>
+        <span id="lastUpdated" class="stat-sub"></span>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

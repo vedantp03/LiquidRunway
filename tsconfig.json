@@ -16,6 +16,6 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["agent", "web"],
-  "exclude": ["node_modules", "dist", "contracts"]
+  "include": ["agent", "web/server.ts"],
+  "exclude": ["node_modules", "dist", "contracts", "web/public"]
 }

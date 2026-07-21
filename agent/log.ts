@@ -11,6 +11,12 @@ export interface AgentState {
   lastActionAt?: number;
   /** When true, the loop reads/decides/logs but never executes. */
   paused: boolean;
+  /** Reference point for portfolio-wide P&L: total account value when tracking
+   * started (or was last reset). */
+  baseline?: { valueUsdc: number; at: number };
+  /** Cumulative USDC intentionally withdrawn from the wallet (simulated spends)
+   * since the baseline. Excluded from P&L so spends don't look like losses. */
+  externalOutflowUsdc?: number;
 }
 
 export interface AuditEntry {
@@ -54,6 +60,29 @@ export function setPaused(paused: boolean): AgentState {
 
 export function recordAction(at: number): void {
   writeState({ ...readState(), lastActionAt: at });
+}
+
+/** Sets the P&L baseline only if one isn't already set. */
+export function ensureBaseline(valueUsdc: number, at = Date.now()): AgentState {
+  const state = readState();
+  if (state.baseline) return state;
+  const updated = { ...state, baseline: { valueUsdc, at }, externalOutflowUsdc: state.externalOutflowUsdc ?? 0 };
+  writeState(updated);
+  return updated;
+}
+
+/** Re-anchors the P&L baseline to the given value and clears tracked outflows. */
+export function resetBaseline(valueUsdc: number, at = Date.now()): AgentState {
+  const updated = { ...readState(), baseline: { valueUsdc, at }, externalOutflowUsdc: 0 };
+  writeState(updated);
+  return updated;
+}
+
+export function addExternalOutflow(amountUsdc: number): AgentState {
+  const state = readState();
+  const updated = { ...state, externalOutflowUsdc: (state.externalOutflowUsdc ?? 0) + amountUsdc };
+  writeState(updated);
+  return updated;
 }
 
 export function appendAudit(entry: AuditEntry): void {

@@ -26,14 +26,15 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const usd = (x: number) => `$${x.toFixed(2)}`;
 
 /**
- * Pure rebalancing decision. Rule of the product: protect liquidity first,
+ * Pure, ungated proposal: what the agent *would* do given the portfolio,
+ * ignoring pause and cooldown. Rule of the product: protect liquidity first,
  * invest second.
- *  - Below the floor  -> TOP_UP immediately (sell risk -> USDC back to the floor).
+ *  - Below the floor  -> TOP_UP (sell risk -> USDC back to the floor).
  *  - Comfortably above the floor (> floor + band) -> DEPLOY idle USDC into risk.
  *  - Otherwise HOLD.
- * Guardrails: cooldown between actions, and a max trade size cap.
+ * The only guardrail applied here is the max trade size cap.
  */
-export function decide(portfolio: Portfolio, policy: Policy, ctx: DecideContext): Decision {
+export function propose(portfolio: Portfolio, policy: Policy): Decision {
   const { liquidityPct, totalValueUsdc, usdc } = portfolio;
   const floor = policy.liquidityFloorPct;
   const base = {
@@ -42,31 +43,17 @@ export function decide(portfolio: Portfolio, policy: Policy, ctx: DecideContext)
     totalValueUsdc,
   };
 
-  if (ctx.paused) {
-    return { action: "HOLD", amountUsdc: 0, reason: "Agent is paused.", ...base };
-  }
-
   if (totalValueUsdc <= 0) {
     return { action: "HOLD", amountUsdc: 0, reason: "Portfolio is empty.", ...base };
   }
 
   const targetUsdc = floor * totalValueUsdc;
-
-  // Cooldown gate: report the intended action but don't act yet.
-  const cooldownRemaining = remainingCooldown(policy, ctx);
+  const deployThreshold = floor + policy.rebalanceBandPct;
 
   if (liquidityPct < floor) {
     const rawAmount = targetUsdc - usdc;
     const amountUsdc = Math.min(rawAmount, policy.maxTradeSizeUsdc);
     const capNote = rawAmount > policy.maxTradeSizeUsdc ? ` (capped at ${usd(policy.maxTradeSizeUsdc)})` : "";
-    if (cooldownRemaining > 0) {
-      return {
-        action: "HOLD",
-        amountUsdc: 0,
-        reason: `Below floor (${pct(liquidityPct)} < ${pct(floor)}) but in cooldown for ${cooldownRemaining}s.`,
-        ...base,
-      };
-    }
     return {
       action: "TOP_UP",
       amountUsdc,
@@ -77,19 +64,10 @@ export function decide(portfolio: Portfolio, policy: Policy, ctx: DecideContext)
     };
   }
 
-  const deployThreshold = floor + policy.rebalanceBandPct;
   if (liquidityPct > deployThreshold) {
     const rawAmount = usdc - targetUsdc;
     const amountUsdc = Math.min(rawAmount, policy.maxTradeSizeUsdc);
     const capNote = rawAmount > policy.maxTradeSizeUsdc ? ` (capped at ${usd(policy.maxTradeSizeUsdc)})` : "";
-    if (cooldownRemaining > 0) {
-      return {
-        action: "HOLD",
-        amountUsdc: 0,
-        reason: `Above deploy band (${pct(liquidityPct)} > ${pct(deployThreshold)}) but in cooldown for ${cooldownRemaining}s.`,
-        ...base,
-      };
-    }
     return {
       action: "DEPLOY",
       amountUsdc,
@@ -106,6 +84,36 @@ export function decide(portfolio: Portfolio, policy: Policy, ctx: DecideContext)
     reason: `Liquidity ${pct(liquidityPct)} is within target band [${pct(floor)}, ${pct(deployThreshold)}].`,
     ...base,
   };
+}
+
+/**
+ * The autonomous decision: the proposal with the pause and cooldown gates
+ * applied on top. Used by the loop; the UI uses `propose()` directly so it can
+ * show (and manually approve) an action even while paused or in cooldown.
+ */
+export function decide(portfolio: Portfolio, policy: Policy, ctx: DecideContext): Decision {
+  const { liquidityPct, totalValueUsdc } = portfolio;
+  const floor = policy.liquidityFloorPct;
+  const base = { liquidityPct, floorPct: floor, totalValueUsdc };
+
+  if (ctx.paused) {
+    return { action: "HOLD", amountUsdc: 0, reason: "Agent is paused.", ...base };
+  }
+
+  const proposal = propose(portfolio, policy);
+  if (proposal.action === "HOLD") return proposal;
+
+  const cooldownRemaining = remainingCooldown(policy, ctx);
+  if (cooldownRemaining > 0) {
+    const deployThreshold = floor + policy.rebalanceBandPct;
+    const reason =
+      proposal.action === "TOP_UP"
+        ? `Below floor (${pct(liquidityPct)} < ${pct(floor)}) but in cooldown for ${cooldownRemaining}s.`
+        : `Above deploy band (${pct(liquidityPct)} > ${pct(deployThreshold)}) but in cooldown for ${cooldownRemaining}s.`;
+    return { action: "HOLD", amountUsdc: 0, reason, ...base };
+  }
+
+  return proposal;
 }
 
 function remainingCooldown(policy: Policy, ctx: DecideContext): number {

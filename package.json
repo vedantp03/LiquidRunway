@@ -13,6 +13,7 @@
     "agent:status": "node agent/index.ts --status",
     "agent:pause": "node agent/index.ts --pause",
     "agent:resume": "node agent/index.ts --resume",
+    "web": "node web/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
