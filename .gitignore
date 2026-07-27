@@ -4,12 +4,17 @@
 node_modules/
 dist/
 *.log
+.DS_Store
 
-# Foundry
+# Circle entity-secret recovery (NEVER commit)
+recovery/
+*.dat
+
+# Foundry build artifacts / local broadcast state
 contracts/out/
 contracts/cache/
 contracts/broadcast/
 
-# state / audit log db
-agent/state/*.json
+# Local agent runtime state (audit trail, pause/cooldown, P&L baseline)
+agent/state/*
 !agent/state/.gitkeep
